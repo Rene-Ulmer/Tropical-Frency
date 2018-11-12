@@ -1,0 +1,16 @@
+[package]
+name = "nostd"
+version = "0.1.0"
+authors = ["Kevin Hamacher <kevin.hamacher@ruhr-uni-bochum.de>"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[profile.release]
+lto = true
+panic = 'abort'
+
+[dependencies]
+
+[dependencies.wee_alloc]
+version = "0.4"

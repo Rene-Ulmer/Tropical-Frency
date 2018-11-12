@@ -1,0 +1,156 @@
+<button id="go">Go!</button>
+<canvas id="screen" style="width: 100vw; height: 100vh; image-rendering: pixelated;"></canvas>
+<script>
+    /**********************************************************************/
+    // Music stuff
+    var audio_ctx = new AudioContext();
+    var nodes = [];
+    function play_tone(freq) {
+        let osc = audio_ctx.createOscillator();
+        let gain = audio_ctx.createGain();
+
+        let idx = -1;
+        for (let i = 0; i < nodes.length; i++) {
+            if (!nodes[i]) {
+                idx = i; break;
+            }
+        }
+
+        if (idx == -1) idx = nodes.length;
+
+        osc.connect(gain);
+        gain.connect(audio_ctx.destination);
+
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        gain.gain.value = 0.005;
+
+        osc.start();
+        nodes[idx] = osc;
+        return idx;
+    }
+
+    function stop_tone(idx) {
+        if (nodes[idx]) {
+            nodes[idx].stop();
+            nodes[idx] = null;
+        }
+    }
+    /**********************************************************************/
+    const imports = {
+        env: {
+            c: Math.cos,
+            q: Math.sqrt,
+            a: Math.atan2,
+            R: function(n_colors) {
+                console.log("# colors used: ", n_colors);
+            },
+
+            P: play_tone,
+            S: stop_tone,
+        },
+    };
+
+
+    fetch("target/wasm32-unknown-unknown/release/nostd.wasm").then(
+        response => response.arrayBuffer()
+    ).then(
+        bytes => WebAssembly.instantiate(bytes, imports)
+    ).then(results => {
+        let mod = results.instance;
+
+        // Export everything.
+        let module = mod.exports;
+
+        // From the requirements: 360x400.
+        var canvas = document.getElementById('screen');
+
+        const width  = 360;
+        const height = 400;
+        canvas.width = width;
+        canvas.height = height;
+
+        // Setup framebuffer memory.
+        let byteSize = width * height * 4;
+        var ctx = canvas.getContext('2d');
+
+        // Allocate frame buffer.
+        var pointer = module.alloc(byteSize);
+        var running = false;
+
+        function step(timestamp) {
+            if (!running) return;
+            try {
+                module.T(pointer, width, height, timestamp);
+            } catch (e) {
+                console.log("Err: ", e);
+                alert(":(");
+                running = false;
+            }
+
+            let usub = new Uint8ClampedArray(module.memory.buffer,
+                                         pointer, byteSize);
+            let img = new ImageData(usub, width, height);
+            ctx.putImageData(img, 0, 0);
+            window.requestAnimationFrame(step);
+        }
+
+        // I/O related stuff, forward into WASM
+        function omm(e) {
+            // Report relative mouse movement.
+            module.mm(e.movementX, e.movementY);
+        }
+        // MouseMove is only getting registered on pointerlock.
+
+        function okd(e) {
+            // Disable key repeat
+            if (e.repeat !== undefined && e.repeat) return;
+            module.kd(e.charCode || e.keyCode);
+        }
+        document.addEventListener("keydown", okd, false);
+
+        function oku(e) {
+            module.ku(e.charCode || e.keyCode);
+        }
+        document.addEventListener("keyup", oku, false);
+
+        function omd(e) {
+            module.md(e.button);
+        }
+        document.addEventListener("mousedown", omd, false);
+
+        function omu(e) {
+            module.mu(e.button);
+        }
+        document.addEventListener("mouseup", omu, false);
+
+        function plc() {
+              if (document.pointerLockElement === canvas) {
+                    document.addEventListener("mousemove", omm, false);
+                    running = true;
+                    window.requestAnimationFrame(step);
+                } else {
+                    document.removeEventListener("mousemove", omm, false);
+                    running = false;
+              }
+        }
+        document.addEventListener('pointerlockchange', plc, false);
+
+        function fsc(e) {
+            if (document.webkitIsFullScreen) {
+                canvas.requestPointerLock();
+            } else {
+                document.exitPointerLock();
+                for (let tone in nodes) {
+                    if (nodes[tone]) nodes[tone].stop();
+                }
+            }
+        }
+        document.addEventListener('webkitfullscreenchange', fsc, false);
+
+        function gfc(e) {
+            canvas.webkitRequestFullScreen(Element.ALLOW_KEYBOARD_INPUT);
+        }
+        document.getElementById("go").addEventListener("click", gfc);
+    });
+</script>

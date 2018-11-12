@@ -1,0 +1,165 @@
+<button id="F">Go</button>
+<canvas id="S"
+        style=width:100vw;height:100vh;image-rendering:pixelated;></canvas>
+<script>
+    var audio_ctx = new AudioContext();
+    var nodes = [];
+    function play_tone(freq) {
+        var osc = audio_ctx.createOscillator();
+        var gain = audio_ctx.createGain();
+
+        var idx = -1;
+        for (var i = 0; i < nodes.length; i++) {
+            if (!nodes[i]) {
+                idx = i; break;
+            }
+        }
+
+        if (idx == -1) idx = nodes.length;
+
+        osc.connect(gain);
+        gain.connect(audio_ctx.destination);
+
+        osc.type = 'square';
+        osc.frequency.value = freq;
+        gain.gain.value = 0.005;
+
+        osc.start();
+        nodes[idx] = osc;
+        return idx;
+    }
+
+    function stop_tone(idx) {
+        if (nodes[idx]) {
+            nodes[idx].stop();
+            nodes[idx] = null;
+        }
+    }
+
+    function run(url) {
+        var img = new Image();
+
+        img.onload = function () {
+            const imports = {
+                env: {
+                    c: Math.cos,
+                    q: Math.sqrt,
+                    a: Math.atan2,
+
+                    P: play_tone,
+                    S: stop_tone,
+                },
+            };
+            var c = document.createElement("canvas");
+            c.width = this.width;
+            c.height = this.height;
+
+            var cctx = c.getContext("2d");
+            cctx.drawImage(this, 0, 0);
+
+            var buf = cctx.getImageData(0, 0, c.width, c.height).data.buffer;
+
+            var pad = 0; // XXX HARDCODED, CHANGE ME MANUALLY.
+
+            var bytes = new ArrayBuffer(3 * (buf.byteLength / 4) - pad)
+            var src = new Int8Array(buf);
+            var dst = new Int8Array(bytes);
+
+            for (var i = 0; i < buf.byteLength / 4; i++) {
+                dst[i * 3 + 0] = src[i * 4 + 0];
+                dst[i * 3 + 1] = src[i * 4 + 1];
+                dst[i * 3 + 2] = src[i * 4 + 2];
+            }
+
+            WebAssembly.instantiate(bytes, imports).then(results => {
+                var mod = results.instance;
+                // Export everything.
+                var module = mod.exports;
+                var canvas = document.getElementById('S');
+
+                const width  = 360;
+                const height = 400;
+                canvas.width = width;
+                canvas.height = height;
+
+                // Setup framebuffer memory.
+                var byteSize = width * height * 4;
+                var ctx = canvas.getContext('2d');
+
+                // Allocate frame buffer.
+                var pointer = module.alloc(byteSize);
+                var running = false;
+
+                function X(timestamp) {
+                    if (!running) return;
+                    module.T(pointer, width, height, timestamp);
+
+                    var usub = new Uint8ClampedArray(module.memory.buffer,
+                                                 pointer, byteSize);
+                    var img = new ImageData(usub, width, height);
+                    ctx.putImageData(img, 0, 0);
+                    window.requestAnimationFrame(X);
+                }
+
+                // I/O related stuff, forward into WASM
+                function omm(e) {
+                    module.mm(e.movementX, e.movementY);
+                }
+
+                function okd(e) {
+                    if (e.repeat !== undefined && e.repeat) return;
+                    module.kd(e.charCode || e.keyCode);
+                }
+                document.addEventListener("keydown", okd, false);
+
+                function oku(e) {
+                    module.ku(e.charCode || e.keyCode);
+                }
+                document.addEventListener("keyup", oku, false);
+
+                function omd(e) {
+                    module.md(e.button);
+                }
+                document.addEventListener("mousedown", omd, false);
+
+                function omu(e) {
+                    module.mu(e.button);
+                }
+                document.addEventListener("mouseup", omu, false);
+
+                function lca() {
+                      if (document.pointerLockElement === canvas) {
+                            document.addEventListener("mousemove", omm, false);
+                            running = true;
+                            window.requestAnimationFrame(X);
+                        } else {
+                            document.removeEventListener("mousemove", omm, false);
+                            running = false;
+                      }
+                }
+                document.addEventListener('pointerlockchange', lca, false);
+
+                function fsc(e) {
+                    if (document.webkitIsFullScreen) {
+                        canvas.requestPointerLock();
+                    } else {
+                        document.exitPointerLock();
+                        for (var tone in nodes) {
+                            if (nodes[tone]) nodes[tone].stop();
+                        }
+                    }
+                }
+                document.addEventListener('webkitfullscreenchange', fsc, false);
+
+                function gfs(e) {
+                    canvas.webkitRequestFullScreen(Element.ALLOW_KEYBOARD_INPUT);
+                }
+                document.getElementById("F").addEventListener("click", gfs);
+            });
+        };
+
+        img.src = url;
+    }
+
+    run("b");
+</script>
